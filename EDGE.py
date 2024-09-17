@@ -56,12 +56,20 @@ class EDGE:
 
         self.accelerator.wait_for_everyone()
 
+        # Use mps device if available, otherwise use cpu
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
         checkpoint = None
         if checkpoint_path != "":
-            checkpoint = torch.load(
-                checkpoint_path, map_location=self.accelerator.device
-            )
-            self.normalizer = checkpoint["normalizer"]
+            try:
+                checkpoint = torch.load(
+                    checkpoint_path, map_location=self.device
+                )
+                self.normalizer = checkpoint["normalizer"]
+            except Exception as e:
+                print(f"Error loading checkpoint: {e}")
+                print(f"Checkpoint path: {checkpoint_path}")
+                print("Initializing without checkpoint.")
 
         model = DanceDecoder(
             nfeats=repr_dim,
@@ -75,7 +83,7 @@ class EDGE:
             activation=F.gelu,
         )
 
-        smpl = SMPLSkeleton(self.accelerator.device)
+        smpl = SMPLSkeleton(self.device)
         diffusion = GaussianDiffusion(
             model,
             horizon,
@@ -95,17 +103,25 @@ class EDGE:
         )
 
         self.model = self.accelerator.prepare(model)
-        self.diffusion = diffusion.to(self.accelerator.device)
+        self.diffusion = diffusion.to(self.device)
         optim = Adan(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.optim = self.accelerator.prepare(optim)
 
-        if checkpoint_path != "":
+        if checkpoint_path != "" and checkpoint is not None:
             self.model.load_state_dict(
                 maybe_wrap(
                     checkpoint["ema_state_dict" if EMA else "model_state_dict"],
                     num_processes,
                 )
             )
+        else:
+            print("Model initialized without loading a checkpoint.")
+
+    def to(self, device):
+        self.device = device
+        self.model = self.model.to(device)
+        self.diffusion = self.diffusion.to(device)
+        return self
 
     def eval(self):
         self.diffusion.eval()
@@ -251,7 +267,7 @@ class EDGE:
                     print("Generating Sample")
                     # draw a music from the test dataset
                     (x, cond, filename, wavnames) = next(iter(test_data_loader))
-                    cond = cond.to(self.accelerator.device)
+                    cond = cond.to(self.device)
                     self.diffusion.render_sample(
                         shape,
                         cond[:render_count],
@@ -273,7 +289,7 @@ class EDGE:
         if render_count < 0:
             render_count = len(cond)
         shape = (render_count, self.horizon, self.repr_dim)
-        cond = cond.to(self.accelerator.device)
+        cond = cond.to(self.device)
         self.diffusion.render_sample(
             shape,
             cond[:render_count],
