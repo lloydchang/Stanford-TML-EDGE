@@ -38,6 +38,8 @@ def parse_train_opt():
     parser.add_argument(
         "--checkpoint", type=str, default="", help="trained checkpoint path (optional)"
     )
+    # New argument for learning rate
+    parser.add_argument("--learning_rate", type=float, default=0.0002, help="learning rate for the optimizer")
     opt = parser.parse_args()
     return opt
 
