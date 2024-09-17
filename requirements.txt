@@ -1,0 +1,15 @@
+numpy
+scipy
+tqdm
+p_tqdm
+matplotlib
+einops
+torch
+torchvision
+torchaudio
+soundfile==0.10.3.post1 # jukebox 1.0 requires soundfile==0.10.3.post1
+librosa
+wandb
+accelerate
+git+https://github.com/lloydchang/rodrigo-castellon-jukebox@lloydchang-patch-1
+git+https://github.com/lloydchang/rodrigo-castellon-jukemirlib@lloydchang-patch-1
