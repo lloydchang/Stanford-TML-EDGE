@@ -103,8 +103,17 @@ def test(opt):
             all_cond.append(cond_list)
             all_filenames.append(file_list[rand_idx : rand_idx + sample_size])
 
-    model = EDGE(opt.feature_type, opt.checkpoint)
-    model.eval()
+    # Use MPS if available, otherwise fall back to CPU
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    try:
+        model = EDGE(opt.feature_type, opt.checkpoint).to(device)
+        model.eval()
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        print(f"Checkpoint path: {opt.checkpoint}")
+        raise
 
     # directory for optionally saving the dances for eval
     fk_out = None
@@ -113,12 +122,16 @@ def test(opt):
 
     print("Generating dances")
     for i in range(len(all_cond)):
-        data_tuple = None, all_cond[i], all_filenames[i]
-        model.render_sample(
-            data_tuple, "test", opt.render_dir, render_count=-1, fk_out=fk_out, render=not opt.no_render
-        )
+        try:
+            data_tuple = None, all_cond[i].to(device), all_filenames[i]
+            model.render_sample(
+                data_tuple, "test", opt.render_dir, render_count=-1, fk_out=fk_out, render=not opt.no_render
+            )
+        except Exception as e:
+            print(f"Error generating dance for sample {i}: {e}")
+            continue
     print("Done")
-    torch.cuda.empty_cache()
+    torch.mps.empty_cache()
     for temp_dir in temp_dir_list:
         temp_dir.cleanup()
 
