@@ -31,7 +31,7 @@ This repository additionally depends on the following libraries, which may requi
 ### Load custom music
 You can test the model on custom music by downloading them as `.wav` files into a directory, e.g. `custom_music/` and running
 ```.bash
-python test.py --music_dir custom_music/
+python test.py --music_dir custom_music/ --cache_features
 ```
 This process may take a while, since the script will extract all the Jukebox representations for the specified music in memory. The representations can also be saved and reused to improve speed with the `--cache_features` and `--use_cached_features` arguments. See `args.py` for more detail.
 Note: make sure file names are regularized, e.g. `Britney Spears - Toxic (Official HD Video).wav` may cause unpredictable behavior due to the spaces and parentheses, but `toxic.wav` will behave as expected. See how the demo notebook achieves this using the `youtube-dl --output` flag.
@@ -55,7 +55,7 @@ Evaluate your model's outputs with the Physical Foot Contact (PFC) score propose
 1. Generate ~1k samples, saving the joint positions with the `--save_motions` argument
 2. Run the evaluation script
 ```.bash
-python test.py --music_dir custom_music/ --save_motions
+python test.py --music_dir custom_music/ --save_motions --cache_features --use_cached_features
 python eval/eval_pfc.py
 ```
 ## Blender 3D rendering

@@ -19,6 +19,8 @@ from model.diffusion import GaussianDiffusion
 from model.model import DanceDecoder
 from vis import SMPLSkeleton
 
+import os
+os.environ["WANDB_DISABLED"] = "true"
 
 def wrap(x):
     return {f"module.{key}": value for key, value in x.items()}
@@ -39,7 +41,18 @@ class EDGE:
         weight_decay=0.02,
     ):
         ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-        self.accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
+        
+        # Determine the appropriate device and Accelerator settings
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+            self.accelerator = Accelerator(kwargs_handlers=[ddp_kwargs], mixed_precision='no')
+        elif torch.cuda.is_available():
+            self.device = torch.device("cuda")
+            self.accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
+        else:
+            self.device = torch.device("cpu")
+            self.accelerator = Accelerator(kwargs_handlers=[ddp_kwargs], cpu=True)
+        
         state = AcceleratorState()
         num_processes = state.num_processes
         use_baseline_feats = feature_type == "baseline"
@@ -56,16 +69,18 @@ class EDGE:
 
         self.accelerator.wait_for_everyone()
 
-        # Use mps device if available, otherwise use cpu
-        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        # Initialize normalizer
+        self.normalizer = normalizer
 
         checkpoint = None
         if checkpoint_path != "":
             try:
                 checkpoint = torch.load(
-                    checkpoint_path, map_location=self.device
+                    checkpoint_path, map_location=self.device,
+                    weights_only=True,
                 )
-                self.normalizer = checkpoint["normalizer"]
+                if self.normalizer is None:
+                    self.normalizer = checkpoint.get("normalizer")
             except Exception as e:
                 print(f"Error loading checkpoint: {e}")
                 print(f"Checkpoint path: {checkpoint_path}")
@@ -116,6 +131,8 @@ class EDGE:
             )
         else:
             print("Model initialized without loading a checkpoint.")
+
+        print(f"Normalizer after initialization: {self.normalizer}")
 
     def to(self, device):
         self.device = device
@@ -284,21 +301,31 @@ class EDGE:
     def render_sample(
         self, data_tuple, label, render_dir, render_count=-1, fk_out=None, render=True
     ):
+        print(f"Normalizer at the start of render_sample: {self.normalizer}")
         _, cond, wavname = data_tuple
         assert len(cond.shape) == 3
         if render_count < 0:
             render_count = len(cond)
         shape = (render_count, self.horizon, self.repr_dim)
         cond = cond.to(self.device)
-        self.diffusion.render_sample(
-            shape,
-            cond[:render_count],
-            self.normalizer,
-            label,
-            render_dir,
-            name=wavname[:render_count],
-            sound=True,
-            mode="long",
-            fk_out=fk_out,
-            render=render
-        )
+        
+        if self.normalizer is None:
+            print("Warning: Normalizer is not set. Rendering sample without normalization.")
+        
+        try:
+            self.diffusion.render_sample(
+                shape,
+                cond[:render_count],
+                self.normalizer,
+                label,
+                render_dir,
+                name=wavname[:render_count],
+                sound=True,
+                mode="long",
+                fk_out=fk_out,
+                render=render
+            )
+        except Exception as e:
+            print(f"Error in render_sample: {e}")
+            print(f"Shape: {shape}, Cond shape: {cond.shape}, Normalizer: {self.normalizer}")
+            raise

@@ -52,6 +52,15 @@ def test(opt):
         for dir in dir_list:
             file_list = sorted(glob.glob(f"{dir}/*.wav"), key=stringintkey)
             juke_file_list = sorted(glob.glob(f"{dir}/*.npy"), key=stringintkey)
+            print(f"Directory: {dir}")
+            print(f"Number of .wav files: {len(file_list)}")
+            print(f"Number of .npy files: {len(juke_file_list)}")
+            if len(file_list) != len(juke_file_list):
+                print("Mismatched files:")
+                wav_set = set(os.path.splitext(os.path.basename(f))[0] for f in file_list)
+                npy_set = set(os.path.splitext(os.path.basename(f))[0] for f in juke_file_list)
+                print("WAV files without NPY:", wav_set - npy_set)
+                print("NPY files without WAV:", npy_set - wav_set)
             assert len(file_list) == len(juke_file_list)
             # random chunk after sanity check
             rand_idx = random.randint(0, len(file_list) - sample_size)
